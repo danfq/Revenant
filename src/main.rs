@@ -3,10 +3,7 @@
 //! recover deleted, hidden and purged photos from an encrypted iOS backup.
 //! the backup is read only; all output lands inside a workspace directory
 
-mod backup;
-mod commands;
-mod crypto;
-mod keybag;
+use revenant_core::commands;
 
 use std::path::PathBuf;
 
@@ -19,7 +16,7 @@ use commands::Ctx;
 #[command(
     name = "revenant",
     version,
-    about = "recover deleted, hidden and purged photos from an encrypted iOS backup"
+    about = "Recover deleted, hidden and purged photos from an encrypted iOS backup"
 )]
 struct Cli {
     /// path to the backup directory (the folder holding Manifest.plist)

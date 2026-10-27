@@ -6,7 +6,7 @@ only), then digs out the imagery and metadata that survive after a user deletes
 a photo: cached thumbnails, orphaned thumbnails of purged assets, and deleted
 database records carved from free pages.
 
-It is a single self-contained Rust binary. Nothing is uploaded anywhere: every
+The CLI is a single self-contained Rust binary. Nothing is uploaded anywhere: every
 step runs on your machine and writes only inside a workspace directory you
 choose.
 
@@ -52,6 +52,41 @@ login Keychain (item "iOS Backup").
 cargo build --release
 # binary at target/release/revenant
 ```
+
+## Development layout
+
+- `src/main.rs`: CLI entry point (`revenant`).
+- `crates/core`: shared recovery library (`revenant-core`).
+- `gui`: React/Vite frontend, with the Tauri backend in `gui/src-tauri`
+  (`revenant-gui`).
+
+The workspace shares the root `Cargo.lock` and `target/` directory. Plain
+`cargo build` and `cargo test` select the CLI and core library. Use
+`cargo check --workspace` to include the desktop backend.
+
+For GUI development, install Bun and the platform's Tauri prerequisites, then:
+
+```bash
+cd gui
+bun install
+bun run tauri dev
+# build the desktop application:
+bun run tauri build
+```
+
+With `just` installed, run these commands from the project root:
+
+| Command | Purpose |
+| --- | --- |
+| `just install` | Install frontend dependencies from the lockfile. |
+| `just run` / `just dev` | Start the Tauri backend and frontend with hot reload. |
+| `just prod` | Start a release-mode backend with the frontend dev server. |
+| `just build` | Build the release CLI, frontend, and desktop bundles. |
+| `just test` | Run workspace Rust tests, frontend type checking, and frontend tests when present. |
+| `just clean` | Remove Rust build artifacts and local frontend build caches. |
+
+The frontend currently has no test files; its type check still runs as part of
+`just test`. Cleanup preserves dependencies, lockfiles, and recovered data.
 
 ## Usage
 

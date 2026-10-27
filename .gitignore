@@ -10,3 +10,9 @@ target/
 
 # macOS
 .DS_Store
+
+# GUI build artifacts
+node_modules/
+/gui/dist/
+/gui/src-tauri/gen/
+*.tsbuildinfo

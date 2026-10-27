@@ -2,7 +2,7 @@
 name = "revenant"
 version = "0.1.0"
 edition = "2021"
-description = "recover deleted, hidden and purged photos from an encrypted iOS backup"
+description = "Recover deleted, hidden and purged photos from an encrypted iOS backup"
 license = "AGPL-3.0-only"
 readme = "README.md"
 
@@ -10,18 +10,18 @@ readme = "README.md"
 name = "revenant"
 path = "src/main.rs"
 
+[workspace]
+members = ["crates/core", "gui/src-tauri"]
+default-members = [".", "crates/core"]
+resolver = "2"
+
 [dependencies]
-aes = "0.8"
-pbkdf2 = "0.12"
-sha1 = "0.10"
-sha2 = "0.10"
-plist = "1"
-rusqlite = "0.31"
+revenant-core = { path = "crates/core" }
 clap = { version = "4", features = ["derive"] }
-rpassword = "7"
-csv = "1"
 anyhow = "1"
 
 [profile.release]
-opt-level = 3
+codegen-units = 1
 lto = true
+opt-level = 3
+strip = true

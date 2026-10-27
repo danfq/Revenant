@@ -1,0 +1,18 @@
+[package]
+name = "revenant-core"
+version = "0.1.0"
+edition = "2021"
+description = "Recover deleted, hidden and purged photos from an encrypted iOS backup"
+license = "AGPL-3.0-only"
+readme = "../../README.md"
+
+[dependencies]
+aes = "0.8"
+pbkdf2 = "0.12"
+sha1 = "0.10"
+sha2 = "0.10"
+plist = "1"
+rusqlite = "0.31"
+rpassword = "7"
+csv = "1"
+anyhow = "1"
