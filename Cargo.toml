@@ -1,0 +1,27 @@
+[package]
+name = "revenant"
+version = "0.1.0"
+edition = "2021"
+description = "recover deleted, hidden and purged photos from an encrypted iOS backup"
+license = "AGPL-3.0-only"
+readme = "README.md"
+
+[[bin]]
+name = "revenant"
+path = "src/main.rs"
+
+[dependencies]
+aes = "0.8"
+pbkdf2 = "0.12"
+sha1 = "0.10"
+sha2 = "0.10"
+plist = "1"
+rusqlite = "0.31"
+clap = { version = "4", features = ["derive"] }
+rpassword = "7"
+csv = "1"
+anyhow = "1"
+
+[profile.release]
+opt-level = 3
+lto = true

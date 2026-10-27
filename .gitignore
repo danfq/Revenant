@@ -1,0 +1,4 @@
+/target
+/workspace
+*.decrypted.db
+.DS_Store
