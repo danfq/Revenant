@@ -1,4 +1,12 @@
-/target
+# Rust
+debug/
+target/
+**/*.rs.bk
+*.pdb
+
+# revenant workspace (holds decrypted private data, never commit)
 /workspace
 *.decrypted.db
+
+# macOS
 .DS_Store
