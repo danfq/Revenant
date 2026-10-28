@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "revenant",
-        "width": 800,
-        "height": 600
+        "title": "Revenant",
+        "width": 960,
+        "height": 680,
+        "minWidth": 820,
+        "minHeight": 600
       }
     ],
     "security": {

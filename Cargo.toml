@@ -18,6 +18,7 @@ resolver = "2"
 [dependencies]
 revenant-core = { path = "crates/core" }
 clap = { version = "4", features = ["derive"] }
+rpassword = "7"
 anyhow = "1"
 
 [profile.release]

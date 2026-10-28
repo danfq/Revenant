@@ -12,6 +12,14 @@ use clap::{Parser, Subcommand};
 
 use commands::Ctx;
 
+/// read the backup password from the environment, or prompt for it unechoed
+fn read_password() -> Result<String> {
+    match std::env::var("IOS_BACKUP_PASSWORD") {
+        Ok(v) if !v.is_empty() => Ok(v),
+        _ => Ok(rpassword::prompt_password("backup password (not echoed): ")?),
+    }
+}
+
 #[derive(Parser)]
 #[command(
     name = "revenant",
@@ -62,9 +70,11 @@ fn main() -> Result<()> {
     let ctx = Ctx {
         backup: cli.backup,
         work: cli.work,
+        password: read_password()?,
         count_only: cli.count_only,
         force: cli.force,
         include_all: cli.include_all,
+        report: None,
     };
 
     match cli.cmd {

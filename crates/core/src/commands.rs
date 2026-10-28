@@ -6,7 +6,6 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::OnceLock;
 
 use anyhow::{anyhow, Context, Result};
 use rusqlite::types::ValueRef;
@@ -18,28 +17,27 @@ const CORE_DATA_EPOCH: i64 = 978_307_200; // seconds between 1970 and 2001
 const PHOTOS_DB: &str = "Media/PhotoData/Photos.sqlite";
 const THUMB_PREFIX: &str = "Media/PhotoData/Thumbnails/";
 
-/// shared run context from the cli
+/// progress sink: a run can stream its log lines somewhere other than stdout
+pub type Reporter = Box<dyn Fn(&str) + Send + Sync>;
+
+/// shared run context from the caller (cli or gui)
 pub struct Ctx {
     pub backup: PathBuf,
     pub work: PathBuf,
+    pub password: String,
     pub count_only: bool,
     pub force: bool,
     pub include_all: bool,
+    /// where progress lines go; stdout when absent
+    pub report: Option<Reporter>,
 }
 
-static PASSWORD: OnceLock<String> = OnceLock::new();
-
-/// read the backup password once, from env or an unechoed prompt, then cache it
-fn password() -> Result<String> {
-    if let Some(p) = PASSWORD.get() {
-        return Ok(p.clone());
+/// emit one progress line through the reporter, or to stdout when none is set
+fn say(ctx: &Ctx, line: impl AsRef<str>) {
+    match &ctx.report {
+        Some(report) => report(line.as_ref()),
+        None => println!("{}", line.as_ref()),
     }
-    let p = match std::env::var("IOS_BACKUP_PASSWORD") {
-        Ok(v) if !v.is_empty() => v,
-        _ => rpassword::prompt_password("backup password (not echoed): ")?,
-    };
-    let _ = PASSWORD.set(p.clone());
-    Ok(p)
 }
 
 fn manifest_path(ctx: &Ctx) -> PathBuf {
@@ -53,6 +51,21 @@ fn photos_path(ctx: &Ctx) -> PathBuf {
 fn open_ro(path: &Path) -> Result<Connection> {
     Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .with_context(|| format!("opening {}", path.display()))
+}
+
+/// fold any -wal frames into the main file and drop wal journalling
+///
+/// a decrypted db often carries a wal-mode header but no -wal/-shm sidecars,
+/// which makes a later read-only open fail; checkpointing also pulls in rows
+/// that still live only in the wal
+fn normalize_db(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let conn = Connection::open(path).with_context(|| format!("opening {}", path.display()))?;
+    conn.query_row("PRAGMA journal_mode=DELETE", [], |_| Ok(()))
+        .with_context(|| format!("normalising {}", path.display()))?;
+    Ok(())
 }
 
 fn table_columns(conn: &Connection, table: &str) -> Vec<String> {
@@ -108,15 +121,18 @@ fn iso_from_core_data(core: f64) -> String {
 
 pub fn decrypt(ctx: &Ctx) -> Result<()> {
     std::fs::create_dir_all(&ctx.work)?;
-    let pw = password()?;
-    let (ok, n) = backup::decrypt_manifest_db(&ctx.backup, &pw, &manifest_path(ctx))?;
+    let pw = ctx.password.as_str();
+    say(ctx, "[..] unlocking the backup (deriving the keys can take a moment)");
+    let (ok, n) = backup::decrypt_manifest_db(&ctx.backup, pw, &manifest_path(ctx))?;
     if !ok {
         return Err(anyhow!("wrong password or Manifest.db did not decrypt to sqlite"));
     }
-    println!("[ok] Manifest.db decrypted  ({n} class keys unlocked)");
+    say(ctx, format!("[ok] Manifest.db decrypted  ({n} class keys unlocked)"));
 
-    let (kb, _, _) = backup::load_keybag(&ctx.backup, &pw)?;
+    normalize_db(&manifest_path(ctx))?;
+    let (kb, _, _) = backup::load_keybag(&ctx.backup, pw)?;
     let man = open_ro(&manifest_path(ctx))?;
+    say(ctx, "[..] decrypting Photos.sqlite from the backup");
     for rp in [
         PHOTOS_DB,
         &format!("{PHOTOS_DB}-wal"),
@@ -134,14 +150,12 @@ pub fn decrypt(ctx: &Ctx) -> Result<()> {
             let out = ctx.work.join(name);
             if backup::decrypt_backup_file(&ctx.backup, &kb, &fid, &blob, &out)? {
                 let mb = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0) as f64 / 1e6;
-                println!("[ok] decrypted {}  ({mb:.1} MB)", name.to_string_lossy());
+                say(ctx, format!("[ok] decrypted {}  ({mb:.1} MB)", name.to_string_lossy()));
             }
         }
     }
-    if ctx.work.join("Photos.sqlite-wal").exists() {
-        println!("[note] a -wal file is present; open Photos.sqlite once read-write to checkpoint");
-    }
-    println!("[done] decrypt");
+    normalize_db(&photos_path(ctx))?;
+    say(ctx, "[done] decrypt");
     Ok(())
 }
 
@@ -157,7 +171,7 @@ pub fn carve(ctx: &Ctx) -> Result<()> {
         std::fs::remove_file(&rec)?;
     }
 
-    println!("[..] running sqlite3 .recover (can take a minute on a large library)");
+    say(ctx, "[..] running sqlite3 .recover (can take a minute on a large library)");
     let dump = Command::new("sqlite3")
         .arg(&src)
         .arg(".recover")
@@ -199,7 +213,7 @@ pub fn carve(ctx: &Ctx) -> Result<()> {
 
     let cols = table_columns(&recdb, "ZASSET");
     if !cols.iter().any(|c| c == "ZUUID") {
-        println!("[warn] recovered db has no ZASSET.ZUUID, nothing to diff");
+        say(ctx, "[warn] recovered db has no ZASSET.ZUUID, nothing to diff");
         return Ok(());
     }
     let wanted: Vec<&str> = [
@@ -245,14 +259,14 @@ pub fn carve(ctx: &Ctx) -> Result<()> {
         extra.push((created, trashed));
     }
 
-    println!(
-        "[ok] deleted ZASSET rows recovered from free pages: {}",
-        deleted_rows.len()
+    say(
+        ctx,
+        format!("[ok] deleted ZASSET rows recovered from free pages: {}", deleted_rows.len()),
     );
 
     if ctx.count_only {
-        println!("[count-only] not writing deleted_assets.csv");
-        println!("[done] carve");
+        say(ctx, "[count-only] not writing deleted_assets.csv");
+        say(ctx, "[done] carve");
         return Ok(());
     }
 
@@ -271,11 +285,11 @@ pub fn carve(ctx: &Ctx) -> Result<()> {
         w.write_record(&rec_row)?;
     }
     w.flush()?;
-    println!(
-        "     written to {} (open it locally; it contains filenames + dates)",
-        out_csv.display()
+    say(
+        ctx,
+        format!("     written to {} (open it locally; it contains filenames + dates)", out_csv.display()),
     );
-    println!("[done] carve");
+    say(ctx, "[done] carve");
     Ok(())
 }
 
@@ -331,6 +345,7 @@ pub fn thumbnails(ctx: &Ctx) -> Result<()> {
     }
     let man = open_ro(&manifest_path(ctx))?;
     let ps = open_ro(&photos_path(ctx))?;
+    say(ctx, "[..] matching thumbnails against the live library");
 
     let cols = table_columns(&ps, "ZASSET");
     let has = |c: &str| cols.iter().any(|x| x == c);
@@ -404,9 +419,12 @@ pub fn thumbnails(ctx: &Ctx) -> Result<()> {
     }
     let total = thumbs.len();
     let use_uuid = uuid_hit >= path_hit;
-    println!(
-        "[info] thumbnails={total}  uuid-matches={uuid_hit}  path-matches={path_hit}  -> using {} keying",
-        if use_uuid { "uuid" } else { "path" }
+    say(
+        ctx,
+        format!(
+            "[info] thumbnails={total}  uuid-matches={uuid_hit}  path-matches={path_hit}  -> using {} keying",
+            if use_uuid { "uuid" } else { "path" }
+        ),
     );
 
     let is_orphan = |rp: &str| -> bool {
@@ -445,26 +463,26 @@ pub fn thumbnails(ctx: &Ctx) -> Result<()> {
                 .unwrap_or(false)
         })
         .count();
-    println!(
-        "[info] orphan={}  hidden-album={c_hidden}  recently-deleted={c_trash} thumbnails",
-        orphans.len()
+    say(
+        ctx,
+        format!("[info] orphan={}  hidden-album={c_hidden}  recently-deleted={c_trash} thumbnails", orphans.len()),
     );
 
     if frac > 0.20 && !ctx.force {
-        println!("[stop] more than 20% unmatched: keying probably did not resolve cleanly.");
-        println!("       inspect a few paths yourself, then re-run as:  revenant --force thumbnails");
-        println!("       (--force goes before the step name, like -c)");
+        say(ctx, "[stop] more than 20% unmatched: keying probably did not resolve cleanly.");
+        say(ctx, "       inspect a few paths yourself, then re-run as:  revenant --force thumbnails");
+        say(ctx, "       (--force goes before the step name, like -c)");
         return Ok(());
     }
 
     if ctx.count_only {
-        println!("[count-only] not exporting any images");
-        println!("[note] orphan set is the best evidence of permanently purged media");
-        println!("[done] thumbnails");
+        say(ctx, "[count-only] not exporting any images");
+        say(ctx, "[note] orphan set is the best evidence of permanently purged media");
+        say(ctx, "[done] thumbnails");
         return Ok(());
     }
 
-    let (kb, _, _) = backup::load_keybag(&ctx.backup, &password()?)?;
+    let (kb, _, _) = backup::load_keybag(&ctx.backup, &ctx.password)?;
     let base = ctx.work.join("recovered");
     let out_orphan = base.join("orphan_thumbnails");
     let out_hidden = base.join("hidden_thumbnails");
@@ -496,11 +514,11 @@ pub fn thumbnails(ctx: &Ctx) -> Result<()> {
         }
     }
 
-    println!("[ok] orphan thumbnails recovered       : {n_orphan} -> {}", out_orphan.display());
-    println!("[ok] hidden-album thumbnails exported   : {n_hidden} -> {}", out_hidden.display());
-    println!("[ok] recently-deleted thumbnails export : {n_trash} -> {}", out_trash.display());
-    println!("[note] orphan set is the best evidence of permanently purged media");
-    println!("[done] thumbnails");
+    say(ctx, format!("[ok] orphan thumbnails recovered       : {n_orphan} -> {}", out_orphan.display()));
+    say(ctx, format!("[ok] hidden-album thumbnails exported   : {n_hidden} -> {}", out_hidden.display()));
+    say(ctx, format!("[ok] recently-deleted thumbnails export : {n_trash} -> {}", out_trash.display()));
+    say(ctx, "[note] orphan set is the best evidence of permanently purged media");
+    say(ctx, "[done] thumbnails");
     Ok(())
 }
 
@@ -511,6 +529,7 @@ pub fn media(ctx: &Ctx) -> Result<()> {
         return Err(anyhow!("run 'decrypt' first"));
     }
     let man = open_ro(&manifest_path(ctx))?;
+    say(ctx, "[..] scanning media present in the backup");
 
     let mut groups: Vec<(&str, &str)> = vec![
         ("originals_DCIM", "Media/DCIM/%"),
@@ -525,7 +544,7 @@ pub fn media(ctx: &Ctx) -> Result<()> {
     let kb = if ctx.count_only {
         None
     } else {
-        Some(backup::load_keybag(&ctx.backup, &password()?)?.0)
+        Some(backup::load_keybag(&ctx.backup, &ctx.password)?.0)
     };
 
     for (label, like) in groups {
@@ -548,7 +567,7 @@ pub fn media(ctx: &Ctx) -> Result<()> {
         };
 
         if ctx.count_only {
-            println!("[count] {label:<20} {} files present", rows.len());
+            say(ctx, format!("[count] {label:<20} {} files present", rows.len()));
             continue;
         }
 
@@ -562,8 +581,8 @@ pub fn media(ctx: &Ctx) -> Result<()> {
                 ok += 1;
             }
         }
-        println!("[ok] {label:<20} {ok}/{} files -> {}", rows.len(), base.join(label).display());
+        say(ctx, format!("[ok] {label:<20} {ok}/{} files -> {}", rows.len(), base.join(label).display()));
     }
-    println!("[done] media");
+    say(ctx, "[done] media");
     Ok(())
 }
