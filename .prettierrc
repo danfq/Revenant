@@ -1,0 +1,18 @@
+{
+  "endOfLine": "lf",
+  "semi": false,
+  "singleQuote": false,
+  "tabWidth": 2,
+  "bracketSameLine": true,
+  "trailingComma": "es5",
+  "printWidth": 140,
+  "plugins": ["./gui/node_modules/prettier-plugin-astro/dist/index.js"],
+  "overrides": [
+    {
+      "files": "*.astro",
+      "options": {
+        "parser": "astro"
+      }
+    }
+  ]
+}

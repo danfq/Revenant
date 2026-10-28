@@ -1,5 +1,5 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
+import reactLogo from "./assets/react.svg?url";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
@@ -12,7 +12,7 @@ function App() {
     setGreetMsg(await invoke("greet", { name }));
   }
 
-  return (
+return (
     <main className="container">
       <h1>Welcome to Tauri + React</h1>
 

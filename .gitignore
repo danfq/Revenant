@@ -14,5 +14,6 @@ target/
 # GUI build artifacts
 node_modules/
 /gui/dist/
+/gui/.astro/
 /gui/src-tauri/gen/
 *.tsbuildinfo

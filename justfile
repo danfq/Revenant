@@ -6,7 +6,7 @@ default:
 install:
     cd gui && bun install --frozen-lockfile
 
-# Start the desktop backend and Vite frontend (mode: dev or release).
+# Start the desktop backend and Astro frontend (mode: dev or release).
 run mode="dev":
     #!/usr/bin/env sh
     set -eu
@@ -21,7 +21,7 @@ run mode="dev":
 dev:
     @just run dev
 
-# Start the desktop app with a release backend and the Vite dev server.
+# Start the desktop app with a release backend and the Astro dev server.
 prod:
     @just run release
 
@@ -39,5 +39,15 @@ clean:
 # Run Rust tests, frontend type checking, and any frontend tests.
 test:
     cargo test --locked --workspace
-    cd gui && bunx --no-install tsc --noEmit
-    cd gui && bun test --pass-with-no-tests
+    cd gui && bun run check
+    cd gui && bun run test
+
+# Format Rust and all Prettier-supported files throughout the project.
+format:
+    cargo fmt --all
+    bun ./gui/node_modules/prettier/bin/prettier.cjs --write .
+
+# Check formatting without modifying files.
+format-check:
+    cargo fmt --all --check
+    bun ./gui/node_modules/prettier/bin/prettier.cjs --check .

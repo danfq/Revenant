@@ -1,0 +1,8 @@
+target/
+node_modules/
+gui/dist/
+gui/.astro/
+gui/src-tauri/gen/
+workspace/
+Cargo.lock
+gui/bun.lock

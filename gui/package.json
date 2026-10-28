@@ -4,10 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
+    "dev": "bun --bun astro dev",
+    "build": "bun run check && bun --bun astro build",
+    "preview": "bun --bun astro preview",
+    "tauri": "tauri",
+    "check": "bun --bun astro check",
+    "test": "bun --bun vp test --passWithNoTests"
   },
   "dependencies": {
     "react": "^19.1.0",
@@ -16,11 +18,21 @@
     "@tauri-apps/plugin-opener": "^2"
   },
   "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "@astrojs/react": "7.1.1",
+    "@tauri-apps/cli": "^2",
+    "@types/node": "26.6.5",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^6.0.2",
+    "astro": "7.4.2",
+    "prettier": "3.9.10",
+    "prettier-plugin-astro": "1.1.2",
     "typescript": "~6.0.3",
-    "vite": "^8.0.16",
-    "@tauri-apps/cli": "^2"
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+    "vite-plus": "1.4.0"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+    "vitest": "5.0.5"
   }
 }

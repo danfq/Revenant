@@ -57,7 +57,7 @@ cargo build --release
 
 - `src/main.rs`: CLI entry point (`revenant`).
 - `crates/core`: shared recovery library (`revenant-core`).
-- `gui`: React/Vite frontend, with the Tauri backend in `gui/src-tauri`
+- `gui`: Astro + React frontend powered by Vite+, with the Tauri backend in `gui/src-tauri`
   (`revenant-gui`).
 
 The workspace shares the root `Cargo.lock` and `target/` directory. Plain
@@ -74,6 +74,14 @@ bun run tauri dev
 bun run tauri build
 ```
 
+Astro builds static pages into `gui/dist` for Tauri. `gui/src/pages/index.astro`
+mounts the React app with `client:only="react"` so Tauri APIs run in the webview.
+Astro owns development and builds; its Vite dependency is aliased to the pinned
+Vite+ core. Keep the `vite-plus` version and `vite` alias/override aligned when
+upgrading. Vite+ also runs frontend tests; Prettier remains the formatter.
+Use `bun run dev` for the frontend alone, `bun run check` for Astro/TypeScript
+checks, and `bun run build` for a checked production frontend build.
+
 With `just` installed, run these commands from the project root:
 
 | Command | Purpose |
@@ -82,11 +90,19 @@ With `just` installed, run these commands from the project root:
 | `just run` / `just dev` | Start the Tauri backend and frontend with hot reload. |
 | `just prod` | Start a release-mode backend with the frontend dev server. |
 | `just build` | Build the release CLI, frontend, and desktop bundles. |
-| `just test` | Run workspace Rust tests, frontend type checking, and frontend tests when present. |
+| `just test` | Run workspace Rust tests, Astro/TypeScript checks, and Vite+ frontend tests. |
+| `just format` | Format all Rust and Prettier-supported project files. |
+| `just format-check` | Check formatting without changing files. |
 | `just clean` | Remove Rust build artifacts and local frontend build caches. |
 
 The frontend currently has no test files; its type check still runs as part of
 `just test`. Cleanup preserves dependencies, lockfiles, and recovered data.
+
+Formatting uses the root `.prettierrc` for Astro, web files, JSON, and Markdown, and
+`rustfmt.toml` for Rust. Both use two-space indentation, LF endings, and a
+140-column target. `.editorconfig` supplies these defaults for other text files.
+VS Code recommends the matching extensions and formats supported files on save.
+Run `just install` first to install the pinned Prettier version.
 
 ## Usage
 
